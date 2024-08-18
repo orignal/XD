@@ -2,12 +2,6 @@ package swarm
 
 import (
 	"bytes"
-	"net"
-	"net/http"
-	"net/url"
-	"os"
-	"strings"
-	"time"
 	"github.com/majestrate/XD/lib/bittorrent"
 	"github.com/majestrate/XD/lib/bittorrent/extensions"
 	"github.com/majestrate/XD/lib/common"
@@ -19,6 +13,12 @@ import (
 	"github.com/majestrate/XD/lib/storage"
 	"github.com/majestrate/XD/lib/tracker"
 	"github.com/majestrate/XD/lib/util"
+	"net"
+	"net/http"
+	"net/url"
+	"os"
+	"strings"
+	"time"
 )
 
 // a bittorrent swarm tracking many torrents
@@ -130,13 +130,14 @@ func (sw *Swarm) inboundConn(c net.Conn) {
 			c.Close()
 			return
 		}
+		// check if we should accept this new peer or not
+		if !t.ShouldAcceptNewPeer() {
+			c.Close()
+			return
+		}
 		var opts extensions.Message
 		if h.Reserved.Has(bittorrent.Extension) {
-			if t.Ready() {
-				opts = extensions.NewOur(uint32(len(t.metaInfo)))
-			} else {
-				opts = extensions.NewOur(0)
-			}
+			opts = t.defaultOpts.Copy()
 		}
 		// reply to handshake
 		var id common.PeerID
@@ -320,11 +321,11 @@ func (sw *Swarm) AddRemoteTorrent(remote string) (err error) {
 	var u *url.URL
 	u, err = url.Parse(remote)
 	if err == nil {
-		scheme := strings.ToLower(u.Scheme)
+		scheme, path := util.SchemePath(u)
 		if scheme == "magnet" {
 			err = sw.AddMagnet(remote)
 		} else if scheme == "file" || scheme == "" {
-			err = sw.addFileTorrent(u.Path)
+			err = sw.addFileTorrent(path)
 		} else {
 			err = sw.addHTTPTorrent(u.String())
 		}
@@ -369,6 +370,7 @@ func (sw *Swarm) addFileTorrent(path string) (err error) {
 		err = info.BDecode(f)
 		f.Close()
 		if err == nil {
+			log.Infof("fetched torrent from %s, starting allocation", path)
 			var t storage.Torrent
 			t, err = sw.Torrents.st.OpenTorrent(&info)
 			if err == nil {

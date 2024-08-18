@@ -23,7 +23,7 @@ type Torrent interface {
 	// return true if we are currently doing a deep check
 	Checking() bool
 
-	// put a chunk of data 
+	// put a chunk of data
 	PutChunk(pc *common.PieceData) error
 
 	// visit a piece from storage
@@ -40,6 +40,9 @@ type Torrent interface {
 
 	// get bitfield, if cached return cache otherwise compute and cache
 	Bitfield() *bittorrent.Bitfield
+
+	// get number of bytes we already downloaded
+	DownloadedSize() uint64
 
 	// get number of bytes remaining we need to download
 	DownloadRemaining() uint64
@@ -67,7 +70,7 @@ type Torrent interface {
 	Seed() (bool, error)
 
 	// set metainfo for empty torrent
-	PutInfo(info metainfo.Info) error
+	PutInfoBytes(info []byte) error
 
 	// get directory for data files
 	DownloadDir() string

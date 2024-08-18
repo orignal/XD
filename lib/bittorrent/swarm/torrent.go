@@ -3,9 +3,6 @@ package swarm
 import (
 	"bytes"
 	"errors"
-	"github.com/zeebo/bencode"
-	"net"
-	"time"
 	"github.com/majestrate/XD/lib/bittorrent"
 	"github.com/majestrate/XD/lib/bittorrent/extensions"
 	"github.com/majestrate/XD/lib/common"
@@ -18,6 +15,8 @@ import (
 	"github.com/majestrate/XD/lib/sync"
 	"github.com/majestrate/XD/lib/tracker"
 	"github.com/majestrate/XD/lib/util"
+	"net"
+	"time"
 )
 
 // max peers peer swarm default
@@ -73,6 +72,11 @@ type Torrent struct {
 	pexInterval      time.Duration
 }
 
+func (t *Torrent) ShouldAcceptNewPeer() bool {
+	state := t.GetStatus().State
+	return state == Downloading || state == Seeding
+}
+
 func (t *Torrent) getNextPeer() *PeerConn {
 	p := t.peersPool.Get()
 	return p.(*PeerConn)
@@ -100,9 +104,6 @@ func (t *Torrent) Close() error {
 	t.VisitPeers(func(c *PeerConn) {
 		c.Close()
 	})
-	for t.NumPeers() > 0 {
-		time.Sleep(time.Millisecond)
-	}
 	t.saveStats()
 	return t.st.Flush()
 }
@@ -160,11 +161,9 @@ func newTorrent(st storage.Torrent, getNet func() network.Network) *Torrent {
 		t.statsTracker.NewRate(rate)
 	}
 	if t.Ready() {
-		buff := new(bytes.Buffer)
-		info := t.st.MetaInfo().Info
-		bencode.NewEncoder(buff).Encode(&info)
-		t.defaultOpts = extensions.NewOur(uint32(buff.Len()))
-		t.metaInfo = buff.Bytes()
+		bytes := t.st.MetaInfo().RawInfo
+		t.defaultOpts = extensions.NewOur(uint32(len(bytes)))
+		t.metaInfo = bytes
 	} else {
 		t.defaultOpts = extensions.NewOur(0)
 	}
@@ -536,7 +535,7 @@ func (t *Torrent) getMetaInfo() []byte {
 	if t.metaInfo == nil {
 		info := t.st.MetaInfo()
 		if info != nil {
-			t.metaInfo = info.Info.Bytes()
+			t.metaInfo = info.RawInfo
 		}
 	}
 	return t.metaInfo
@@ -571,13 +570,8 @@ func (t *Torrent) putInfoSlice(idx uint32, data []byte) {
 		if t.hasAllPendingInfo() {
 			t.puttingMetaInfo = true
 			log.Debugf("got all info slices: %q", t.metaInfo)
-			r := bytes.NewReader(t.metaInfo)
-			var info metainfo.Info
-			err := bencode.NewDecoder(r).Decode(&info)
-			if err == nil {
-				log.Info("putting metainfo")
-				err = t.st.PutInfo(info)
-			}
+			log.Info("putting metainfo")
+			err := t.st.PutInfoBytes(t.metaInfo)
 			if err == nil {
 				// reset
 				sz := uint32(len(t.metaInfo))
@@ -587,7 +581,7 @@ func (t *Torrent) putInfoSlice(idx uint32, data []byte) {
 				})
 			} else {
 				t.puttingMetaInfo = false
-				log.Errorf("failed to get meta info %s", err.Error())
+				log.Errorf("failed to get meta info: %s", err.Error())
 				t.resetPendingInfo()
 			}
 		} else {
@@ -805,10 +799,14 @@ func (t *Torrent) tick() {
 	// expire and cancel all timed out pieces
 	t.pt.iterCached(func(cp *cachedPiece) {
 		if cp.isExpired() {
-			t.VisitPeers(func(conn *PeerConn) {
-				conn.cancelPiece(cp.index)
-			})
-			t.pt.removePiece(cp.index)
+			if cp.pending.CountSet() > 0 {
+				t.VisitPeers(func(conn *PeerConn) {
+					conn.cancelPiece(cp.index)
+				})
+				cp.pending.Zero()
+				log.Debugf("Expired piece %d with no recent activity for torrent: %s", cp.index, t.Name())
+			}
+			cp.lastActive = time.Now()
 		}
 	})
 	t.VisitPeers(func(conn *PeerConn) {
@@ -867,11 +865,16 @@ func (t *Torrent) Stop() error {
 	if t.closing {
 		return ErrAlreadyStopped
 	}
+	log.Info("stopping...")
 	err := t.Close()
+	log.Info("stopping announce")
 	t.StopAnnouncing(true)
+	log.Info("stoped announce...")
 	if t.Stopped != nil {
 		t.Stopped()
 	}
+	t.RemoveSelf()
+	log.Info("stopped")
 	return err
 }
 

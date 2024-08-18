@@ -1,6 +1,6 @@
 # XD
 
-I2P BitTorrent Client written in GO
+BitTorrent Client written in GO (as a joke)
 
 ![XD](contrib/logos/xd_logo_256x256.png)
 
@@ -17,7 +17,9 @@ Current:
 
 * i2p only, no chances of cross network contamination, aka no way to leak IP.
 * works with [i2pd](https://github.com/purplei2p/i2pd) and Java I2P using the SAM api
+* also works with [lokinet](https://github.com/oxen-io/lokinet)
 * Magnet URIs
+* memes
 
 Soon:
 
@@ -31,7 +33,7 @@ Eventually:
 ## Dependencies
 
 * GNU Make
-* GO 1.8 or higher
+* GO 1.16 or higher
 
 
 ## Building
@@ -98,3 +100,9 @@ Or your home directory, make sure `$HOME/bin` is in your $PATH
 
     $ make install PREFIX=$HOME
 
+Tunnel length and quanity along with all other i2cp options are set in the i2p section of the configuration:
+```
+[i2p]
+inbound.length=1
+outbound.length=1
+```

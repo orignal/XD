@@ -20,46 +20,32 @@ ifeq ($(LOKINET),1)
 	TAGS += lokinet
 endif
 
+ifeq ($(GOOS),windows)
+	BINEXT = .exe
+endif
+
 MKDIR = mkdir -p
 RM = rm -f
 CP = cp
 CPLINK = cp -P
 INSTALL = install
 LINK = ln -s
-CHMOD = chmod 
+CHMOD = chmod
 
 GIT_VERSION ?= $(shell test -e .git && git rev-parse --short HEAD || true)
 
-ifdef GOROOT
-	GO = $(GOROOT)/bin/go
-else
-	GO = $(shell which go)
-endif
+GO = go
 
-ifeq ($(GOOS),windows)
-	XD := XD.exe
-	CLI := XD-cli.exe
-	PREFIX ?= /usr/local # FIXME
-else
-	XD := XD
-	CLI := XD-cli
-	PREFIX ?= /usr/local
-endif
+XD ?= XD$(BINEXT)
+CLI ?= XD-CLI$(BINEXT)
 
 build: $(CLI)
 
-assets: $(ASSETS)
 
-$(GO_ASSETS):
-	$(GO) build -o $(GO_ASSETS) -v github.com/jessevdk/go-assets-builder
-
-$(ASSETS): $(GO_ASSETS) $(WEBUI_CORE)
-	$(GO_ASSETS) -p assets -s $(WEBUI_PREFIX) -o $(ASSETS) $(WEB_FILES)
-
-$(XD): $(ASSETS)
+$(XD): $(WEBUI_CORE)
 	$(GO) build -a -ldflags "-X xd/lib/version.Git=$(GIT_VERSION)" -tags='$(TAGS)' -o $(XD)
 
-dev: $(ASSETS)
+dev: $(WEBUI_CORE)
 	$(GO) build -race -v -a -ldflags "-X xd/lib/version.Git=$(GIT_VERSION)" -tags='$(TAGS)' -o $(XD)
 
 $(CLI): $(XD)
@@ -68,7 +54,7 @@ $(CLI): $(XD)
 	$(CHMOD) 755 $(CLI)
 
 test:
-	$(GO) test xd/...
+	$(GO) test ./...
 
 clean: webui-clean go-clean
 	$(RM) $(CLI)
@@ -90,6 +76,7 @@ $(WEBUI_LOGO):
 
 $(WEBUI_CORE): $(WEBUI_LOGO)
 	$(MAKE) -C $(WEBUI)
+	$(CP) $(WEB_FILES) $(REPO)/lib/rpc/assets/
 
 webui: $(WEBUI_CORE)
 

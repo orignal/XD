@@ -2,7 +2,6 @@ package storage
 
 import (
 	"errors"
-	"io"
 	"github.com/majestrate/XD/lib/bittorrent"
 	"github.com/majestrate/XD/lib/common"
 	"github.com/majestrate/XD/lib/fs"
@@ -10,7 +9,14 @@ import (
 	"github.com/majestrate/XD/lib/metainfo"
 	"github.com/majestrate/XD/lib/stats"
 	"github.com/majestrate/XD/lib/sync"
+	"io"
 )
+
+/* Mutex used in fsTorrent.VerifyAll to ensure that the integrity of each
+ * torrent is checked one after the other (sequential check) instead of
+ * concurrently before seeding. This makes the check about six times faster (at
+ * least on spinning hard disks). */
+var seqck *sync.Mutex = &sync.Mutex{}
 
 // filesystem based storrent storage session
 type fsTorrent struct {
@@ -238,13 +244,26 @@ func (t *fsTorrent) ensureBitfield() {
 	}
 }
 
+func (t *fsTorrent) DownloadedSize() (r uint64) {
+	if t.meta == nil {
+		return
+	}
+	bf := t.Bitfield()
+	r = uint64(bf.CountSet()) * uint64(t.meta.Info.PieceLength)
+	return
+}
+
 func (t *fsTorrent) DownloadRemaining() (r uint64) {
 	if t.meta == nil {
 		return
 	}
 	bf := t.Bitfield()
 	have := uint64(bf.CountSet()) * uint64(t.meta.Info.PieceLength)
-	r = t.meta.TotalSize() - have
+	if have > t.meta.TotalSize() {
+		r = 0
+	} else {
+		r = t.meta.TotalSize() - have
+	}
 	return
 }
 
@@ -272,10 +291,12 @@ func (t *fsTorrent) FilePath() string {
 
 }
 
-func (t *fsTorrent) PutInfo(info metainfo.Info) (err error) {
+func (t *fsTorrent) PutInfoBytes(info []byte) (err error) {
 	if t.meta == nil {
-		meta := &metainfo.TorrentFile{
-			Info: info,
+		var meta *metainfo.TorrentFile
+		meta, err = metainfo.TorrentFileFromInfoBytes(info)
+		if err != nil {
+			return
 		}
 		ih := meta.Infohash()
 		if !t.ih.Equal(ih) {
@@ -349,6 +370,8 @@ func (t *fsTorrent) VerifyPiece(idx uint32) (err error) {
 }
 
 func (t *fsTorrent) VerifyAll() (err error) {
+	seqck.Lock() // Ensures sequential check
+	defer seqck.Unlock()
 	if t.meta == nil {
 		err = ErrNoMetaInfo
 		return

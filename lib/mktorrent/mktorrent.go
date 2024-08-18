@@ -3,10 +3,10 @@ package mktorrent
 import (
 	"crypto/sha1"
 	"errors"
-	"io"
-	"path/filepath"
 	"github.com/majestrate/XD/lib/fs"
 	"github.com/majestrate/XD/lib/metainfo"
+	"io"
+	"path/filepath"
 )
 
 func mkTorrentSingle(f fs.Driver, fpath string, pieceLength uint32) (*metainfo.TorrentFile, error) {
@@ -37,9 +37,7 @@ func mkTorrentSingle(f fs.Driver, fpath string, pieceLength uint32) (*metainfo.T
 		}
 	}
 
-	return &metainfo.TorrentFile{
-		Info: info,
-	}, nil
+	return metainfo.TorrentFileFromInfo(info)
 }
 
 func mkTorrentDir(f fs.Driver, fpath string, pieceLength uint32) (*metainfo.TorrentFile, error) {

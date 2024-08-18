@@ -1,12 +1,12 @@
 package swarm
 
 import (
-	"net"
-	"strconv"
-	"time"
 	"github.com/majestrate/XD/lib/log"
 	"github.com/majestrate/XD/lib/sync"
 	"github.com/majestrate/XD/lib/tracker"
+	"net"
+	"strconv"
+	"time"
 )
 
 const DefaultAnnounceNumWant = 10
@@ -31,7 +31,9 @@ func (a *torrentAnnounce) tryAnnounce(ev tracker.Event) (err error) {
 			PeerID:     a.t.id,
 			Event:      ev,
 			NumWant:    DefaultAnnounceNumWant,
+			Downloaded: a.t.st.DownloadedSize(),
 			Left:       a.t.st.DownloadRemaining(),
+			Uploaded:   a.t.tx,
 			GetNetwork: a.t.Network,
 		}
 		if la.Network() == "i2p" {

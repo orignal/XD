@@ -8,8 +8,8 @@ import (
 	"time"
 )
 
-const DefaultIfName = "lokitun0"
-const DefaultPort = "0"
+const DefaultHostname = "localhost.loki"
+const DefaultPort = "6888"
 
 type Session struct {
 	localIP   net.IP
@@ -21,26 +21,13 @@ type Session struct {
 	resolver  net.Resolver
 }
 
-func NewSession(ifname, port, dns string) (s *Session, err error) {
-	var netif *net.Interface
-	netif, err = net.InterfaceByName(ifname)
+func NewSession(port, dns string) (s *Session, err error) {
+	var found []net.IP
+	found, err = net.LookupIP(DefaultHostname)
 	if err != nil {
 		return
 	}
-	var ifaddrs []net.Addr
-	ifaddrs, err = netif.Addrs()
-	if err != nil {
-		return
-	}
-	if len(ifaddrs) == 0 {
-		err = fmt.Errorf("%s has no addresses? duh fug yo...", ifname)
-		return
-	}
-	var localIP net.IP
-	localIP, _, err = net.ParseCIDR(ifaddrs[0].String())
-	if err != nil {
-		return
-	}
+	localIP := found[0]
 	ss := &Session{
 		port:      port,
 		localIP:   localIP,
@@ -60,7 +47,7 @@ func NewSession(ifname, port, dns string) (s *Session, err error) {
 		return
 	}
 	if len(names) == 0 {
-		err = fmt.Errorf("we have no rdns record for %s", ifname)
+		err = fmt.Errorf("we have no rdns record for %s", localIP)
 		return
 	}
 	ss.name = strings.TrimSuffix(names[0], ".")
@@ -81,7 +68,8 @@ func (s *Session) Dial(_, a string) (net.Conn, error) {
 	if err != nil {
 		return nil, err
 	}
-	laddr, err := net.ResolveTCPAddr("tcp4", s.localAddr)
+	localAddr := net.JoinHostPort(s.localIP.String(), "0")
+	laddr, err := net.ResolveTCPAddr("tcp4", localAddr)
 	if err != nil {
 		return nil, err
 	}

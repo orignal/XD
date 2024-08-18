@@ -1,11 +1,11 @@
 package config
 
 import (
-	"os"
 	"github.com/majestrate/XD/lib/configparser"
 	"github.com/majestrate/XD/lib/log"
 	"github.com/majestrate/XD/lib/network/i2p"
 	"github.com/majestrate/XD/lib/util"
+	"os"
 )
 
 type I2PConfig struct {
@@ -19,6 +19,7 @@ type I2PConfig struct {
 
 func (cfg *I2PConfig) Load(section *configparser.Section) error {
 	cfg.I2CPOptions = make(map[string]string)
+	cfg.I2CPOptions["i2cp.leaseSetEncType"] = "4,0"
 	if section == nil {
 		cfg.Addr = i2p.DEFAULT_ADDRESS
 		cfg.Keyfile = ""
